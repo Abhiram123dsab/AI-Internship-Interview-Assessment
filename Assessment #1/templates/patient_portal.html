@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Queue Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            border-radius: 15px 15px 0 0;
+            font-weight: bold;
+        }
+        
+        .queue-position {
+            font-size: 3.5rem;
+            font-weight: bold;
+            color: #0d6efd;
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .queue-position-change {
+            position: absolute;
+            top: 0;
+            right: -20px;
+            font-size: 1rem;
+            font-weight: normal;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+        
+        .wait-time {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-align: center;
+            margin: 15px 0;
+        }
+        
+        .wait-time-label {
+            font-size: 1rem;
+            color: #6c757d;
+            text-align: center;
+        }
+        
+        .time-trend {
+            font-size: 0.8rem;
+            display: block;
+            margin-top: 5px;
+        }
+        
+        .trend-up {
+            color: #dc3545;
+        }
+        
+        .trend-down {
+            color: #198754;
+        }
+        
+        .notification-toggle {
+            margin-top: 20px;
+        }
+        
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+        }
+        
+        .doctor-info {
+            background-color: #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .status-badge {
+            font-size: 1rem;
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+        
+        .appointment-time {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        
+        .notification-options {
+            margin-top: 20px;
+        }
+        
+        .whatsapp-option {
+            background-color: #25D366;
+            color: white;
+            border-color: #25D366;
+        }
+        
+        .sms-option {
+            background-color: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        
+        .voice-option {
+            background-color: #6c757d;
+            color: white;
+            border-color: #6c757d;
+        }
+        
+        .timeline-container {
+            position: relative;
+            padding-left: 30px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .timeline-line {
+            position: absolute;
+            left: 15px;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background-color: #dee2e6;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+        }
+        
+        .timeline-dot {
+            position: absolute;
+            left: -30px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #fff;
+            border: 2px solid #0d6efd;
+            z-index: 1;
+        }
+        
+        .timeline-dot.active {
+            background-color: #0d6efd;
+        }
+        
+        .timeline-dot.completed {
+            background-color: #198754;
+            border-color: #198754;
+        }
+        
+        .timeline-content {
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .appointment-progress-chart {
+            height: 100px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4 mb-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="text-center mb-4">
+                    <h2>Jayanagar Specialty Clinic</h2>
+                    <p class="text-muted">Patient Queue Portal</p>
+                </div>
+
+                <!-- Patient Info Card -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Patient Information</span>
+                            <span class="badge bg-light text-dark" id="current-time"></span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-7">
+                                <h5 class="card-title" id="patient-name">John Doe</h5>
+                                <p class="card-text mb-1" id="patient-id">ID: 12345</p>
+                                <p class="card-text mb-1">
+                                    <span class="appointment-time" id="appointment-time">5:30 PM</span>
+                                </p>
+                                <span class="status-badge badge bg-warning text-dark" id="status-badge">In Queue</span>
+                            </div>
+                            <div class="col-5 text-end">
+                                <div class="doctor-info">
+                                    <small class="text-muted">Doctor</small>
+                                    <h6 class="mb-0" id="doctor-name">Dr. Sharma</h6>
+                                    <small class="text-muted" id="doctor-specialty">Cardiology</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Queue Status Card -->
+                <div class="card">
+                    <div class="card-header bg-info text-white">Queue Status</div>
+                    <div class="card-body text-center">
+                        <div class="row">
+                            <div class="col-6 border-end">
+                                <small class="text-muted">Your Position</small>
+                                <div class="queue-position" id="queue-position">3
+                                    <span class="queue-position-change badge bg-success d-none" id="position-change"></span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Estimated Wait</small>
+                                <div class="wait-time" id="wait-time">25</div>
+                                <div class="wait-time-label">minutes
+                                    <span class="time-trend" id="time-trend"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <label class="form-label">Queue Progress</label>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="queue-progress" style="width: 65%" aria-valuenow="65" aria-valuemin="0" aria-valuemax="100">
+                                </div>
+                            </div>
+                            <small class="text-muted mt-2 d-block" id="patients-ahead">2 patients ahead of you</small>
+                            <small class="text-muted mt-1 d-block" id="expected-time">Expected to be called at 6:05 PM</small>
+                        </div>
+
+                        <div class="mt-4">
+                            <canvas id="wait-time-trend-chart" class="appointment-progress-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notification Preferences -->
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">Notification Preferences</div>
+                    <div class="card-body">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="notification-toggle" checked>
+                            <label class="form-check-label" for="notification-toggle">Receive wait time updates</label>
+                        </div>
+
+                        <div class="notification-options">
+                            <p class="mb-2">Notify me when:</p>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="notify-position-change" checked>
+                                <label class="form-check-label" for="notify-position-change">My queue position changes</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="notify-10-min" checked>
+                                <label class="form-check-label" for="notify-10-min">10 minutes before my turn</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="notify-ready" checked>
+                                <label class="form-check-label" for="notify-ready">It's my turn</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="notify-delay" checked>
+                                <label class="form-check-label" for="notify-delay">There's a significant delay</label>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <label class="form-label">Notification Method</label>
+                            <div class="d-flex gap-2 mt-2">
+                                <input type="radio" class="btn-check" name="notification-method" id="sms-option" value="sms" checked>
+                                <label class="btn sms-option" for="sms-option">
+                                    <i class="bi bi-chat-dots-fill me-1"></i> SMS
+                                </label>
+
+                                <input type="radio" class="btn-check" name="notification-method" id="whatsapp-option" value="whatsapp">
+                                <label class="btn whatsapp-option" for="whatsapp-option">
+                                    <i class="bi bi-whatsapp me-1"></i> WhatsApp
+                                </label>
+
+                                <input type="radio" class="btn-check" name="notification-method" id="voice-option" value="voice">
+                                <label class="btn voice-option" for="voice-option">
+                                    <i class="bi bi-telephone-fill me-1"></i> Voice
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-3">
+                            <button class="btn btn-primary" type="button" id="save-preferences">Save Preferences</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appointment Timeline -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">Appointment Timeline</div>
+                    <div class="card-body">
+                        <div class="timeline-container">
+                            <div class="timeline-line"></div>
+
+                            <div class="timeline-item">
+                                <div class="timeline-dot completed" id="timeline-registered"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Registered</h6>
+                                    <p class="mb-0 small text-muted" id="registered-time">5:00 PM</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline-item">
+                                <div class="timeline-dot active" id="timeline-waiting"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Waiting</h6>
+                                    <p class="mb-0 small text-muted">Current Status</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline-item">
+                                <div class="timeline-dot" id="timeline-ready"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Ready to be Seen</h6>
+                                    <p class="mb-0 small text-muted" id="ready-time">Estimated: 6:05 PM</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline-item">
+                                <div class="timeline-dot" id="timeline-consultation"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">In Consultation</h6>
+                                    <p class="mb-0 small text-muted">-</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline-item">
+                                <div class="timeline-dot" id="timeline-completed"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Completed</h6>
+                                    <p class="mb-0 small text-muted">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-grid gap-2 mt-3">
+                    <button class="btn btn-outline-danger" type="button" id="cancel-appointment">
+                        <i class="bi bi-x-circle"></i> Cancel Appointment
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" id="reschedule-appointment">
+                        <i class="bi bi-calendar"></i> Reschedule Appointment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // Initialize Socket.IO connection
+        const socket = io();
+
+        // Sample patient data (in a real app, this would come from the server)
+        const patientData = {
+            name: "John Doe",
+            id: "P-12345",
+            appointmentTime: "17:30",
+            registeredTime: "17:00",
+            doctor: {
+                name: "Dr. Sharma",
+                specialty: "Cardiology"
+            },
+            queuePosition: 3,
+            previousPosition: 4,
+            waitTime: 25,
+            previousWaitTime: 30,
+            patientsAhead: 2,
+            progress: 65,
+            status: "In Queue", // Can be "In Queue", "Ready", "In Progress", "Completed"
+            expectedReadyTime: "18:05",
+            waitTimeTrend: [{
+                time: "17:00",
+                waitTime: 35
+            }, {
+                time: "17:10",
+                waitTime: 32
+            }, {
+                time: "17:20",
+                waitTime: 30
+            }, {
+                time: "17:30",
+                waitTime: 25
+            }]
+        };
+
+        // Populate patient data
+        document.getElementById('patient-name').textContent = patientData.name;
+        document.getElementById('patient-id').textContent = `ID: ${patientData.id}`;
+        document.getElementById('appointment-time').textContent = patientData.appointmentTime;
+        document.getElementById('doctor-name').textContent = patientData.doctor.name;
+        document.getElementById('doctor-specialty').textContent = patientData.doctor.specialty;
+        document.getElementById('queue-position').textContent = patientData.queuePosition;
+        document.getElementById('wait-time').textContent = patientData.waitTime;
+        document.getElementById('queue-progress').style.width = `${patientData.progress}%`;
+        document.getElementById('queue-progress').setAttribute('aria-valuenow', patientData.progress);
+        document.getElementById('patients-ahead').textContent = `${patientData.patientsAhead} patients ahead of you`;
+        document.getElementById('expected-time').textContent = `Expected to be called at ${patientData.expectedReadyTime}`;
+        document.getElementById('registered-time').textContent = patientData.registeredTime;
+        document.getElementById('ready-time').textContent = `Estimated: ${patientData.expectedReadyTime}`;
+
+        // Show position change if applicable
+        if (patientData.previousPosition > patientData.queuePosition) {
+            const positionChange = document.getElementById('position-change');
+            positionChange.textContent = `↑${patientData.previousPosition - patientData.queuePosition}`;
+            positionChange.classList.remove('d-none');
+        }
+
+        // Show wait time trend
+        const timeTrend = document.getElementById('time-trend');
+        if (patientData.previousWaitTime > patientData.waitTime) {
+            timeTrend.textContent = `↓ ${patientData.previousWaitTime - patientData.waitTime} min`;
+            timeTrend.classList.add('trend-down');
+        } else if (patientData.previousWaitTime < patientData.waitTime) {
+            timeTrend.textContent = `↑ ${patientData.waitTime - patientData.previousWaitTime} min`;
+            timeTrend.classList.add('trend-up');
+        }
+
+        // Set status badge
+        const statusBadge = document.getElementById('status-badge');
+        statusBadge.textContent = patientData.status;
+
+        if (patientData.status === "Ready") {
+            statusBadge.classList.remove('bg-warning');
+            statusBadge.classList.add('bg-success');
+        } else if (patientData.status === "In Progress") {
+            statusBadge.classList.remove('bg-warning');
+            statusBadge.classList.add('bg-primary');
+        } else if (patientData.status === "Completed") {
+            statusBadge.classList.remove('bg-warning');
+            statusBadge.classList.add('bg-secondary');
+        }
+
+        // Initialize wait time trend chart
+        const waitTimeTrendCtx = document.getElementById('wait-time-trend-chart').getContext('2d');
+        const waitTimeTrendChart = new Chart(waitTimeTrendCtx, {
+            type: 'line',
+            data: {
+                labels: patientData.waitTimeTrend.map(item => item.time),
+                datasets: [{
+                    label: 'Wait Time Trend',
+                    data: patientData.waitTimeTrend.map(item => item.waitTime),
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: false
+                        },
+                        ticks: {
+                            display: true,
+                            font: {
+                                size: 10
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 10
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update timeline based on status
+        function updateTimeline(status) {
+            const timelineDots = {
+                registered: document.getElementById('timeline-registered'),
+                waiting: document.getElementById('timeline-waiting'),
+                ready: document.getElementById('timeline-ready'),
+                consultation: document.getElementById('timeline-consultation'),
+                completed: document.getElementById('timeline-completed')
+            };
+
+            // Reset all dots
+            Object.values(timelineDots).forEach(dot => {
+                dot.classList.remove('active', 'completed');
+            });
+
+            // Set appropriate dots based on status
+            timelineDots.registered.classList.add('completed');
+
+            if (status === "In Queue") {
+                timelineDots.waiting.classList.add('active');
+            } else if (status === "Ready") {
+                timelineDots.waiting.classList.add('completed');
+                timelineDots.ready.classList.add('active');
+            } else if (status === "In Progress") {
+                timelineDots.waiting.classList.add('completed');
+                timelineDots.ready.classList.add('completed');
+                timelineDots.consultation.classList.add('active');
+            } else if (status === "Completed") {
+                timelineDots.waiting.classList.add('completed');
+                timelineDots.ready.classList.add('completed');
+                timelineDots.consultation.classList.add('completed');
+                timelineDots.completed.classList.add('active');
+            }
+        }
+
+        // Initialize timeline
+        updateTimeline(patientData.status);
+
+        // Listen for queue updates
+        socket.on('queue_update', function(data) {
+            if (data.patient_id === patientData.id) {
+                // Store previous values for comparison
+                const previousPosition = parseInt(document.getElementById('queue-position').textContent);
+                const previousWaitTime = parseInt(document.getElementById('wait-time').textContent);
+
+                // Update queue position
+                document.getElementById('queue-position').textContent = data.position;
+
+                // Show position change if improved
+                if (previousPosition > data.position) {
+                    const positionChange = document.getElementById('position-change');
+                    positionChange.textContent = `↑${previousPosition - data.position}`;
+                    positionChange.classList.remove('d-none');
+
+                    // Hide the badge after 5 seconds
+                    setTimeout(() => {
+                        positionChange.classList.add('d-none');
+                    }, 5000);
+                }
+
+                // Update wait time
+                document.getElementById('wait-time').textContent = data.wait_time;
+
+                // Show wait time trend
+                const timeTrend = document.getElementById('time-trend');
+                timeTrend.textContent = '';
+                timeTrend.classList.remove('trend-up', 'trend-down');
+
+                if (previousWaitTime > data.wait_time) {
+                    timeTrend.textContent = `↓ ${previousWaitTime - data.wait_time} min`;
+                    timeTrend.classList.add('trend-down');
+                } else if (previousWaitTime < data.wait_time) {
+                    timeTrend.textContent = `↑ ${data.wait_time - previousWaitTime} min`;
+                    timeTrend.classList.add('trend-up');
+                }
+
+                // Update progress
+                const progress = 100 - (data.position / (data.position + 3)) * 100;
+                document.getElementById('queue-progress').style.width = `${progress}%`;
+                document.getElementById('queue-progress').setAttribute('aria-valuenow', progress);
+
+                // Update patients ahead
+                document.getElementById('patients-ahead').textContent =
+                    `${data.position - 1} patients ahead of you`;
+
+                // Update expected time
+                if (data.expected_time) {
+                    document.getElementById('expected-time').textContent = `Expected to be called at ${data.expected_time}`;
+                    document.getElementById('ready-time').textContent = `Estimated: ${data.expected_time}`;
+                }
+
+                // Update wait time trend chart
+                if (data.wait_time_trend) {
+                    waitTimeTrendChart.data.labels = data.wait_time_trend.map(item => item.time);
+                    waitTimeTrendChart.data.datasets[0].data = data.wait_time_trend.map(item => item.waitTime);
+                    waitTimeTrendChart.update();
+                }
+
+                // Update status if needed
+                if (data.status) {
+                    statusBadge.textContent = data.status;
+
+                    // Update timeline
+                    updateTimeline(data.status);
+
+                    if (data.status === "Ready") {
+                        statusBadge.classList.remove('bg-warning');
+                        statusBadge.classList.add('bg-success');
+
+                        // Show notification if enabled
+                        if (document.getElementById('notify-ready').checked) {
+                            // Show notification based on selected method
+                            const notificationMethod = document.querySelector('input[name="notification-method"]:checked').value;
+
+                            if (notificationMethod === 'sms') {
+                                // Send SMS notification
+                                socket.emit('send_notification', {
+                                    type: 'sms',
+                                    patient_id: patientData.id,
+                                    message: "It's your turn! Please proceed to the doctor's office."
+                                });
+                            } else if (notificationMethod === 'whatsapp') {
+                                // Send WhatsApp notification
+                                socket.emit('send_notification', {
+                                    type: 'whatsapp',
+                                    patient_id: patientData.id,
+                                    message: "It's your turn! Please proceed to the doctor's office."
+                                });
+                            } else if (notificationMethod === 'voice') {
+                                // Send voice call notification
+                                socket.emit('send_notification', {
+                                    type: 'voice',
+                                    patient_id: patientData.id,
+                                    message: "It's your turn! Please proceed to the doctor's office."
+                                });
+                            }
+                        }
+                    } else if (data.status === "In Progress") {
+                        statusBadge.classList.remove('bg-warning', 'bg-success');
+                        statusBadge.classList.add('bg-primary');
+                    } else if (data.status === "Completed") {
+                        statusBadge.classList.remove('bg-warning', 'bg-success', 'bg-primary');
+                        statusBadge.classList.add('bg-secondary');
+                    }
+                }
+            }
+        });
+
+        // Handle notification preference changes
+        document.getElementById('save-preferences').addEventListener('click', function() {
+            const preferences = {
+                notifications_enabled: document.getElementById('notification-toggle').checked,
+                notify_position_change: document.getElementById('notify-position-change').checked,
+                notify_10_min: document.getElementById('notify-10-min').checked,
+                notify_ready: document.getElementById('notify-ready').checked,
+                notify_delay: document.getElementById('notify-delay').checked,
+                notification_method: document.querySelector('input[name="notification-method"]:checked').value
+            };
+
+            // Save preferences to server
+            socket.emit('save_preferences', {
+                patient_id: patientData.id,
+                preferences: preferences
+            });
+
+            // Show success message
+            alert('Preferences saved successfully!');
+        });
+
+        // Handle appointment cancellation
+        document.getElementById('cancel-appointment').addEventListener('click', function() {
+            if (confirm('Are you sure you want to cancel your appointment?')) {
+                socket.emit('cancel_appointment', {
+                    patient_id: patientData.id
+                });
+            }
+        });
+
+        // Handle appointment rescheduling
+        document.getElementById('reschedule-appointment').addEventListener('click', function() {
+            // Redirect to rescheduling page
+            window.location.href = `/reschedule/${patientData.id}`;
+        });
+    </script>

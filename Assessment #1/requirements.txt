@@ -3,3 +3,13 @@ pandas
 numpy
 twilio
 python-dotenv
+scikit-learn>=1.0.0
+flask>=2.0.0
+flask-socketio>=5.0.0
+plotly>=5.0.0
+dash>=2.0.0
+tensorflow>=2.0.0
+keras>=2.0.0
+joblib>=1.0.0
+pywhatkit>=5.0
+requests>=2.0.0

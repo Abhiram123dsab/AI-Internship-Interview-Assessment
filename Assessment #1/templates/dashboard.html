@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinic Wait Time Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: transform 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            border-radius: 10px 10px 0 0;
+            font-weight: bold;
+        }
+        
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .alert-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .alert-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            padding: 5px 8px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        
+        .notification-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        
+        @media (max-width: 768px) {
+            .metric-value {
+                font-size: 1.8rem;
+            }
+            .container-fluid {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+        }
+        
+        .doctor-card {
+            border-left: 4px solid #0d6efd;
+        }
+        
+        .satisfaction-high {
+            color: #198754;
+        }
+        
+        .satisfaction-medium {
+            color: #fd7e14;
+        }
+        
+        .satisfaction-low {
+            color: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-hospital"></i> Jayanagar Specialty Clinic Dashboard
+            </a>
+            <div class="d-flex align-items-center">
+                <div class="position-relative me-3">
+                    <button class="btn btn-light btn-sm position-relative" id="notification-bell">
+                        <i class="bi bi-bell-fill"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notification-count">
+                            0
+                        </span>
+                    </button>
+                </div>
+                <span class="navbar-text text-white" id="current-time"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Notification Toast Container -->
+    <div class="notification-toast" id="notification-toast-container"></div>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Key Metrics -->
+            <div class="col-md-3">
+                <div class="card bg-white">
+                    <div class="card-header bg-primary text-white">Current Status</div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col">
+                                <div class="metric-label">Active Patients</div>
+                                <div class="metric-value" id="active-patients">0</div>
+                            </div>
+                            <div class="col">
+                                <div class="metric-label">Avg Wait Time</div>
+                                <div class="metric-value" id="avg-wait-time">0</div>
+                                <div class="small" id="wait-time-unit">min</div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col">
+                                <div class="metric-label">Peak Hour Load</div>
+                                <div class="metric-value" id="peak-hour-load">0%</div>
+                            </div>
+                            <div class="col">
+                                <div class="metric-label">Patient Satisfaction</div>
+                                <div class="metric-value" id="patient-satisfaction">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts -->
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Alerts</span>
+                            <span class="badge bg-light text-danger" id="alert-count">0</span>
+                        </div>
+                    </div>
+                    <div class="card-body alert-container p-0" id="alerts-container">
+                        <ul class="list-group list-group-flush" id="alerts-list">
+                            <li class="list-group-item text-center">No active alerts</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wait Time Chart -->
+            <div class="col-md-5">
+                <div class="card">
+                    <div class="card-header bg-info text-white">Wait Time Trends</div>
+                    <div class="card-body">
+                        <canvas id="wait-time-chart" height="250"></canvas>
+                    </div>
+                </div>
+
+                <!-- Patient Flow Chart -->
+                <div class="card">
+                    <div class="card-header bg-success text-white">Patient Flow by Hour</div>
+                    <div class="card-body">
+                        <canvas id="patient-flow-chart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Doctor Utilization -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">Doctor Utilization</div>
+                    <div class="card-body">
+                        <div id="doctor-utilization-container">
+                            <p class="text-center">Loading doctor data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Wait Time by Doctor -->
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">Wait Time by Doctor</div>
+                    <div class="card-body">
+                        <canvas id="doctor-wait-time-chart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // Initialize Socket.IO connection
+        const socket = io();
+
+        // Register Chart.js plugins
+        Chart.register(ChartDataLabels);
+
+        // Wait time chart
+        const waitTimeCtx = document.getElementById('wait-time-chart').getContext('2d');
+        const waitTimeChart = new Chart(waitTimeCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Wait Time (min)',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointBackgroundColor: 'rgb(75, 192, 192)',
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    datalabels: {
+                        color: '#333',
+                        anchor: 'end',
+                        align: 'top',
+                        formatter: Math.round,
+                        font: {
+                            weight: 'bold'
+                        },
+                        display: function(context) {
+                            return context.dataIndex % 2 === 0; // Show labels for every other point
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 10,
+                        titleFont: {
+                            size: 14
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        displayColors: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Minutes',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Patient flow chart
+        const patientFlowCtx = document.getElementById('patient-flow-chart').getContext('2d');
+        const patientFlowChart = new Chart(patientFlowCtx, {
+            type: 'bar',
+            data: {
+                labels: ['9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20'],
+                datasets: [{
+                    label: 'Patient Count',
+                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    backgroundColor: function(context) {
+                        const value = context.dataset.data[context.dataIndex];
+                        // Highlight peak hours with a different color
+                        return value > 10 ? 'rgba(255, 99, 132, 0.7)' : 'rgba(54, 162, 235, 0.7)';
+                    },
+                    borderColor: function(context) {
+                        const value = context.dataset.data[context.dataIndex];
+                        return value > 10 ? 'rgb(255, 99, 132)' : 'rgb(54, 162, 235)';
+                    },
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    datalabels: {
+                        color: '#333',
+                        anchor: 'end',
+                        align: 'top',
+                        formatter: Math.round,
+                        font: {
+                            weight: 'bold'
+                        }
+                    },
+                    legend: {
+                        labels: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Patients',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Hour of Day',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Doctor wait time chart
+        const doctorWaitTimeCtx = document.getElementById('doctor-wait-time-chart').getContext('2d');
+        const doctorWaitTimeChart = new Chart(doctorWaitTimeCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Wait Time (min)',
+                    data: [],
+                    backgroundColor: function(context) {
+                        const value = context.dataset.data[context.dataIndex];
+                        // Color coding based on wait time severity
+                        if (value > 30) return 'rgba(220, 53, 69, 0.7)'; // High wait time (red)
+                        if (value > 15) return 'rgba(255, 193, 7, 0.7)'; // Medium wait time (yellow)
+                        return 'rgba(25, 135, 84, 0.7)'; // Low wait time (green)
+                    },
+                    borderColor: function(context) {
+                        const value = context.dataset.data[context.dataIndex];
+                        if (value > 30) return 'rgb(220, 53, 69)';
+                        if (value > 15) return 'rgb(255, 193, 7)';
+                        return 'rgb(25, 135, 84)';
+                    },
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: {
+                    datalabels: {
+                        color: '#333',
+                        anchor: 'end',
+                        align: 'right',
+                        formatter: function(value) {
+                            return value.toFixed(1) + ' min';
+                        },
+                        font: {
+                            weight: 'bold'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Minutes',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    y: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update dashboard with received metrics
+        socket.on('metrics_update', function(data) {
+            // Update key metrics
+            document.getElementById('active-patients').textContent = data.current_metrics.active_patients;
+            document.getElementById('avg-wait-time').textContent = data.current_metrics.avg_wait_time.toFixed(1);
+            document.getElementById('peak-hour-load').textContent = (data.current_metrics.peak_hour_load * 100).toFixed(0) + '%';
+
+            const satisfaction = data.current_metrics.patient_satisfaction;
+            const satisfactionElement = document.getElementById('patient-satisfaction');
+            satisfactionElement.textContent = satisfaction.toFixed(0) + '%';
+
+            // Set satisfaction color
+            satisfactionElement.className = 'metric-value';
+            if (satisfaction >= 80) {
+                satisfactionElement.classList.add('satisfaction-high');
+            } else if (satisfaction >= 60) {
+                satisfactionElement.classList.add('satisfaction-medium');
+            } else {
+                satisfactionElement.classList.add('satisfaction-low');
+            }
+
+            // Update alerts
+            const alertsList = document.getElementById('alerts-list');
+            alertsList.innerHTML = '';
+
+            // Update alert count
+            const alertCount = document.getElementById('alert-count');
+            alertCount.textContent = data.alerts.length;
+
+            if (data.alerts.length === 0) {
+                alertsList.innerHTML = '<li class="list-group-item text-center">No active alerts</li>';
+            } else {
+                // Sort alerts by level (high first) and then by timestamp (newest first)
+                const sortedAlerts = [...data.alerts].sort((a, b) => {
+                    const levelOrder = {
+                        'high': 0,
+                        'medium': 1,
+                        'low': 2
+                    };
+                    if (levelOrder[a.level] !== levelOrder[b.level]) {
+                        return levelOrder[a.level] - levelOrder[b.level];
+                    }
+                    // If same level, sort by timestamp (newest first)
+                    return new Date(b.timestamp) - new Date(a.timestamp);
+                });
+
+                sortedAlerts.forEach(alert => {
+                    const alertClass = alert.level === 'high' ? 'list-group-item-danger' :
+                        alert.level === 'medium' ? 'list-group-item-warning' :
+                        'list-group-item-info';
+
+                    const iconClass = alert.level === 'high' ? 'bi-exclamation-triangle-fill' :
+                        alert.level === 'medium' ? 'bi-exclamation-circle' :
+                        'bi-info-circle';
+
+                    alertsList.innerHTML += `
+                        <li class="list-group-item ${alertClass}">
+                            <div class="d-flex justify-content-between">
+                                <span><i class="bi ${iconClass} me-2"></i>${alert.message}</span>
+                                <small>${alert.timestamp}</small>
+                            </div>
+                        </li>
+                    `;
+
+                    // Show toast notification for high-level alerts
+                    if (alert.level === 'high' && alert.isNew) {
+                        showNotification(alert.message, 'danger');
+                    }
+                });
+            }
+
+            // Update wait time chart
+            if (data.historical_data && data.historical_data.timestamps) {
+                waitTimeChart.data.labels = data.historical_data.timestamps;
+                waitTimeChart.data.datasets[0].data = data.historical_data.wait_times;
+                waitTimeChart.update();
+            }
+
+            // Update patient flow by hour
+            if (data.current_metrics.wait_time_by_hour) {
+                const hourData = [];
+                for (let hour = 9; hour <= 20; hour++) {
+                    hourData.push(data.current_metrics.wait_time_by_hour[hour] || 0);
+                }
+                patientFlowChart.data.datasets[0].data = hourData;
+                patientFlowChart.update();
+            }
+
+            // Update doctor utilization
+            const doctorContainer = document.getElementById('doctor-utilization-container');
+            doctorContainer.innerHTML = '';
+
+            if (Object.keys(data.current_metrics.doctor_utilization).length === 0) {
+                doctorContainer.innerHTML = '<p class="text-center">No active doctors</p>';
+            } else {
+                Object.entries(data.current_metrics.doctor_utilization).forEach(([doctorId, stats]) => {
+                    const utilizationPercent = (stats.utilization_rate * 100).toFixed(0);
+                    const delayClass = stats.avg_delay > 30 ? 'text-danger' :
+                        stats.avg_delay > 15 ? 'text-warning' :
+                        'text-success';
+
+                    doctorContainer.innerHTML += `
+                        <div class="card mb-2 doctor-card">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between">
+                                    <h6 class="card-title mb-0">Doctor ${doctorId}</h6>
+                                    <span class="badge bg-primary">${stats.current_patients} patients</span>
+                                </div>
+                                <div class="d-flex justify-content-between mt-2">
+                                    <div>
+                                        <small class="d-block">Utilization:</small>
+                                        <div class="progress" style="height: 5px; width: 100px;">
+                                            <div class="progress-bar" role="progressbar" style="width: ${utilizationPercent}%" 
+                                                aria-valuenow="${utilizationPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <small class="d-block">Avg Delay:</small>
+                                        <span class="${delayClass}">${stats.avg_delay.toFixed(1)} min</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Update doctor wait time chart
+            if (data.current_metrics.wait_time_by_doctor) {
+                const doctorIds = Object.keys(data.current_metrics.wait_time_by_doctor);
+                const waitTimes = doctorIds.map(id => data.current_metrics.wait_time_by_doctor[id]);
+
+                doctorWaitTimeChart.data.labels = doctorIds.map(id => `Doctor ${id}`);
+                doctorWaitTimeChart.data.datasets[0].data = waitTimes;
+                doctorWaitTimeChart.update();
+            }
+        });
+
+        // Notification bell click handler
+        document.getElementById('notification-bell').addEventListener('click', function() {
+            // Reset notification count
+            document.getElementById('notification-count').classList.add('d-none');
+            document.getElementById('notification-count').textContent = '0';
+
+            // Scroll to alerts section
+            document.querySelector('.card-header.bg-danger').scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+
+        // Function to show toast notifications
+        function showNotification(message, type = 'primary') {
+            const toastContainer = document.getElementById('notification-toast-container');
+            const toastId = 'toast-' + Date.now();
+
+            const toast = document.createElement('div');
+            toast.className = `toast show bg-${type} text-white`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            toast.setAttribute('id', toastId);
+
+            toast.innerHTML = `
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="me-auto"><i class="bi bi-bell-fill me-2"></i>Alert Notification</strong>
+                    <small>${new Date().toLocaleTimeString()}</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            // Increment notification count
+            const notificationCount = document.getElementById('notification-count');
+            notificationCount.classList.remove('d-none');
+            notificationCount.textContent = parseInt(notificationCount.textContent || '0') + 1;
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toastContainer.removeChild(toast);
+                }, 500);
+            }, 5000);
+
+            // Close button handler
+            toast.querySelector('.btn-close').addEventListener('click', function() {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toastContainer.removeChild(toast);
+                }, 500);
+            });
+        }
+
+        // Add responsive behavior for mobile devices
+        function adjustForMobileView() {
+            if (window.innerWidth < 768) {
+                // Adjust chart heights for better mobile viewing
+                document.querySelectorAll('canvas').forEach(canvas => {
+                    canvas.height = 200;
+                });
+
+                // Stack columns on mobile
+                document.querySelectorAll('.col-md-3, .col-md-5, .col-md-4').forEach(col => {
+                    col.classList.add('mb-4');
+                });
+            }
+        }
+
+        // Call on load and resize
+        window.addEventListener('resize', adjustForMobileView);
+        adjustForMobileView();
+    </script>
+</body>
+
+</html>
