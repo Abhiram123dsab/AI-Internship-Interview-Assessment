@@ -1,5 +1,7 @@
 import random
 from datetime import datetime
+from advanced_effectiveness_measurement import AdvancedEffectivenessMeasurement
+from effectiveness_measurement_integration import EnhancedCommunicationManager
 
 # Enhanced patient database with more detailed information
 patients = [
@@ -727,7 +729,9 @@ def main():
     ab_testing = AdvancedABTestingFramework()
     channel_optimizer = ChannelOptimizer()
     message_optimizer = MessageOptimizer()
-    communication_manager = CommunicationManager()
+    
+    # Use the enhanced communication manager with advanced effectiveness measurement
+    communication_manager = EnhancedCommunicationManager()
     
     # Initialize real-time analytics dashboard with enhanced metrics
     analytics_dashboard = {
@@ -976,6 +980,62 @@ def main():
     
     # Display analytics dashboard
     print_analytics_dashboard()
+    
+    # Display enhanced effectiveness measurement system reports
+    print("\n🔍 Advanced Effectiveness Measurement System")
+    print("=" * 60)
+    
+    # Get enhanced performance metrics
+    enhanced_metrics = communication_manager.get_enhanced_system_performance()
+    
+    # Display key effectiveness metrics
+    print("\n📊 Channel Effectiveness Index:")
+    for channel, metrics in enhanced_metrics['advanced_metrics']['channel_effectiveness'].items():
+        print(f"{channel}: {metrics['score']:.2f} effectiveness score")
+        print(f"  - Delivery Rate: {metrics['delivery_rate']:.2%}")
+        print(f"  - Response Rate: {metrics['response_rate']:.2%}")
+    
+    # Display demographic performance analysis
+    print("\n👥 Demographic Performance Analysis:")
+    print("Language Performance:")
+    for language, metrics in enhanced_metrics['advanced_metrics']['demographic_performance']['language'].items():
+        if metrics['effectiveness_score'] > 0:
+            print(f"  {language}: {metrics['effectiveness_score']:.2f} score, {metrics['response_rate']:.2%} response rate")
+    
+    print("\nAge Group Performance:")
+    for age_group, metrics in enhanced_metrics['advanced_metrics']['demographic_performance']['age_group'].items():
+        if metrics['effectiveness_score'] > 0:
+            print(f"  {age_group}: {metrics['effectiveness_score']:.2f} score, {metrics['response_rate']:.2%} response rate")
+    
+    # Display real-time monitoring metrics
+    print("\n⚡ Real-time Performance Monitoring:")
+    rt_metrics = enhanced_metrics['advanced_metrics']['real_time_metrics']
+    
+    print("Channel Health Status:")
+    for channel, health in rt_metrics['channel_health'].items():
+        print(f"  {channel}: {health['status']} (Uptime: {health['uptime']:.1f}%, Error Rate: {health['error_rate']:.2%})")
+    
+    # Display delivery status tracking
+    delivery_stats = communication_manager.get_delivery_status_tracking()
+    print("\n📬 Live Delivery Status Tracking:")
+    for channel, stats in delivery_stats.items():
+        if stats['total_sent'] > 0:
+            print(f"  {channel}: {stats['success_rate']:.2%} success rate ({stats['total_delivered']}/{stats['total_sent']} messages)")
+    
+    # Display response time analytics
+    response_analytics = communication_manager.get_response_time_analytics()
+    print("\n⏱️ Response Time Analytics:")
+    for channel, analytics in response_analytics.items():
+        if analytics['sample_size'] > 0:
+            print(f"  {channel}: Avg {analytics['average']:.1f}s, Median {analytics['median']:.1f}s, 90th %ile {analytics['p90']:.1f}s")
+    
+    # Generate visualization
+    print("\n🖼️ Generating Effectiveness Visualization...")
+    visualization_path = communication_manager.generate_effectiveness_visualization("effectiveness_dashboard.png")
+    if visualization_path:
+        print(f"Visualization saved to: {visualization_path}")
+    else:
+        print("Visualization displayed (not saved)")
     
     print("\n🚀 Advanced AI Features:")
     print("1. ML-driven channel optimization with real-time learning")
